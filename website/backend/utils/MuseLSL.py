@@ -17,6 +17,11 @@ sse_clients = set()
 # EEG data queue for sharing data between coroutines
 eeg_queue = asyncio.Queue()
 
+# Blink Detection Settings
+blink_threshold = -200.0  # Adjust based on actual EEG data
+blink_channels = [1, 2]  # Indexes of channels where blinks occur
+blink_detected = False
+
 # SSE endpoint handler
 async def sse_handler(request):
     try:
@@ -75,12 +80,13 @@ async def sse_handler(request):
 async def broadcast_eeg_data():
     while True:
         # Get data from the queue
-        eeg_data, timestamp = await eeg_queue.get()
+        eeg_data, timestamp, has_blink = await eeg_queue.get()
         
-        # Create a JSON message with EEG data and timestamp
+        # Create a JSON message with EEG data, timestamp, and blink status
         message = json.dumps({
             "eeg": eeg_data,
-            "timestamp": timestamp
+            "timestamp": timestamp,
+            "blink": 1 if has_blink else 0
         })
         
         # Send to all connected clients
@@ -92,7 +98,7 @@ async def broadcast_eeg_data():
                 if client_queue in sse_clients:
                     sse_clients.remove(client_queue)
 
-# Main function to process EEG data
+# Main function to process EEG data with minimal buffering
 async def process_eeg_data():
     try:
         # Resolve the stream from MuseLSL (looking for EEG stream)
@@ -109,34 +115,46 @@ async def process_eeg_data():
         
         print(f"Found {len(streams)} stream(s). Using the first one: {streams[0].name()}")
         
-        # Create an inlet for the EEG stream
-        inlet = StreamInlet(streams[0])
+        # Create an inlet with minimal buffering for real-time performance
+        inlet = StreamInlet(streams[0], max_buflen=1, max_chunklen=1)
         
         sample_count = 0
+        blink_detected = False
         
         while True:
             try:
-                # Get the sample (EEG data) and timestamp from the LSL stream
-                sample, timestamp = inlet.pull_sample()
+                # Get the sample with minimal timeout for real-time performance
+                sample, timestamp = inlet.pull_sample(timeout=0.0)
                 
-                sample_count += 1
-                if sample_count % 100 == 0:  # Log every 100th sample to avoid console spam
-                    print(f"Sample #{sample_count}: {sample}")
+                if sample:
+                    sample_count += 1
+                    if sample_count % 100 == 0:  # Log every 100th sample to avoid console spam
+                        print(f"Sample #{sample_count}: {sample}")
+                    
+                    # Send the raw EEG data to TouchDesigner
+                    client.send_message("/muse/eeg", sample)
+                    
+                    # Check for blink (spike downward in specified channels)
+                    first_channel_value = sample[0]  # Using first channel for blink detection
+                    has_blink = False
+                    
+                    if first_channel_value < blink_threshold:
+                        if not blink_detected:  # Prevent multiple triggers for the same blink
+                            print("Blink detected!")
+                            client.send_message("/muse/blink", 1)  # Send blink trigger to TouchDesigner
+                            blink_detected = True
+                            has_blink = True
+                    else:
+                        if blink_detected:  # Only send zero when the blink was previously detected
+                            print("No blink detected.")
+                            client.send_message("/muse/blink", 0)  # Send zero signal to indicate no blink
+                        blink_detected = False
+                    
+                    # Put EEG data in the queue for broadcasting
+                    await eeg_queue.put((sample, timestamp, has_blink))
                 
-                # Build OSC message with EEG data (for TouchDesigner)
-                message = OscMessageBuilder(address="/muse/eeg")
-                for eeg_value in sample:
-                    message.add_arg(eeg_value)
-                
-                # Send the message to TouchDesigner
-                message = message.build()
-                client.send(message)
-                
-                # Put EEG data in the queue for broadcasting
-                await eeg_queue.put((sample, timestamp))
-                
-                # Small delay to prevent overload
-                await asyncio.sleep(0.01)
+                # Small delay to prevent CPU overload but keep real-time performance
+                await asyncio.sleep(0.001)
             except Exception as e:
                 print(f"Error processing EEG sample: {str(e)}")
                 await asyncio.sleep(1)  # Prevent tight loop in case of repeated errors
@@ -148,16 +166,20 @@ async def process_eeg_data():
 # Configure and start the web server
 async def start_server():
     app = web.Application()
-    app.router.add_get('/eeg-stream', sse_handler)
     
-    # Add CORS middleware if needed
-    # app.add_middleware(...)
+    # Simple health check endpoint
+    async def health_check(request):
+        return web.Response(text="SSE server is running")
+    
+    app.router.add_get('/', health_check)
+    app.router.add_get('/eeg-stream', sse_handler)
     
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, 'localhost', 8765)
     await site.start()
     print(f"SSE server started on http://localhost:8765/eeg-stream")
+    print(f"Health check available at http://localhost:8765/")
 
 # Main function to start everything
 async def main():
