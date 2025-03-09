@@ -137,12 +137,25 @@ async def process_eeg_data():
                         
                         # Send the batch to the prediction API
                         try:
-                            # Prepare data for API call
+                            # Reorganize data to match EEGData format
+                            # We need to transpose the data from time-based to channel-based
+                            
+                            # Extract EEG samples from all recordings
+                            all_eeg_samples = [s[0] for s in last_2000_samples]
+                            
+                            # Organize by channel (4 channels)
+                            channels = [[], [], [], []]
+                            for sample in all_eeg_samples:
+                                for i in range(len(sample)):
+                                    if i < len(channels):
+                                        channels[i].append(sample[i])
+                            
+                            # Create data in the format expected by EEGData
                             batch_data = {
-                                "samples": [
-                                    {"eeg": s[0], "timestamp": s[1], "blink": 1 if s[2] else 0}
-                                    for s in last_2000_samples
-                                ]
+                                "channels": channels,
+                                # Optional fields
+                                "timestamp": last_2000_samples[-1][1] if last_2000_samples else None,
+                                # We don't have accelerometer or gyroscope data in this context
                             }
                             
                             # Use aiohttp to make an async API call

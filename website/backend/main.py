@@ -2,10 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import eeg, inference
 
-# Global variable to store the predicted number
-predicted_number = None
-
 app = FastAPI(title="EEG Processing API")
+
+# Initialize app state
+app.state.predicted_number = None
 
 # Configure CORS
 app.add_middleware(
@@ -29,7 +29,7 @@ async def get_prediction():
     Get the current predicted number.
     Returns None if no prediction has been made yet.
     """
-    return {"predicted_number": predicted_number}
+    return {"predicted_number": app.state.predicted_number}
 
 # Endpoint to update the prediction (can be called by your ML model)
 @app.post("/update-prediction")
@@ -37,9 +37,8 @@ async def update_prediction(value: int = None):
     """
     Update the predicted number.
     """
-    global predicted_number
-    predicted_number = value
-    return {"status": "success", "predicted_number": predicted_number}
+    app.state.predicted_number = value
+    return {"status": "success", "predicted_number": app.state.predicted_number}
 
 if __name__ == "__main__":
     import uvicorn
