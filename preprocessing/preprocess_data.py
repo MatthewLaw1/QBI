@@ -17,14 +17,18 @@ warnings.filterwarnings('ignore')
 # Silence specific MNE warnings
 mne.set_log_level('ERROR')  # Only show errors, not warnings
 
+
+
 # Load data from pickle file
-print("Loading EEG dataset from pickle file...")
+"""print("Loading EEG dataset from pickle file...")
 with open("eeg_dataset.pkl", 'rb') as f:
     data = pickle.load(f)
+"""
+
+from convert_parquet_to_np import convert_parquet_to_np
 
 # Extract dataset and labels
-dataset = data['dataset']
-labels = data['labels']
+dataset, labels = convert_parquet_to_np("processed_parquet_delta.parquet")
 
 print(f"Dataset shape: {dataset.shape}")
 print(f"Labels shape: {labels.shape}")

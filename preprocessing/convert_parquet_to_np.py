@@ -64,7 +64,7 @@ def convert_parquet_to_np(parquet_file):
     return dataset, labels
 
 if __name__ == "__main__":
-    dataset, labels = convert_parquet_to_np("eeg_dataset.parquet")
+    dataset, labels = convert_parquet_to_np("processed_parquet_delta.parquet")
     print(dataset.shape)
     print(labels.shape)
     print(dataset[0])
