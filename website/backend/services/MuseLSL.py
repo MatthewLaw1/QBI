@@ -5,6 +5,7 @@ from aiohttp import web
 from pylsl import StreamInlet, resolve_streams
 from pythonosc import udp_client
 from pythonosc.osc_message_builder import OscMessageBuilder
+import aiohttp
 
 # OSC Setup - Set the IP and port of TouchDesigner
 osc_ip = '127.0.0.1'  # Localhost
@@ -120,7 +121,7 @@ async def process_eeg_data():
         
         sample_count = 0
         blink_detected = False
-        
+        last_2000_samples = []
         while True:
             try:
                 # Get the sample with minimal timeout for real-time performance
@@ -130,6 +131,34 @@ async def process_eeg_data():
                     sample_count += 1
                     if sample_count % 100 == 0:  # Log every 100th sample to avoid console spam
                         print(f"Sample #{sample_count}: {sample}")
+
+                    if len(last_2000_samples) >= 2000 : 
+                        print(f"Sending batch of {len(last_2000_samples)} samples to prediction server")
+                        
+                        # Send the batch to the prediction API
+                        try:
+                            # Prepare data for API call
+                            batch_data = {
+                                "samples": [
+                                    {"eeg": s[0], "timestamp": s[1], "blink": 1 if s[2] else 0}
+                                    for s in last_2000_samples
+                                ]
+                            }
+                            
+                            # Use aiohttp to make an async API call
+                            async with aiohttp.ClientSession() as session:
+                                async with session.post('http://localhost:8000/inference/predict', 
+                                                       json=batch_data) as response:
+                                    if response.status == 200:
+                                        result = await response.json()
+                                        print(f"Prediction result: {result}")
+                                    else:
+                                        print(f"API call failed with status {response.status}")
+                        except Exception as e:
+                            print(f"Error sending batch to prediction server: {str(e)}")
+                        
+                        # Reset the samples list after sending
+                        last_2000_samples = []
                     
                     # Send the raw EEG data to TouchDesigner
                     client.send_message("/muse/eeg", sample)
@@ -150,6 +179,7 @@ async def process_eeg_data():
                             client.send_message("/muse/blink", 0)  # Send zero signal to indicate no blink
                         blink_detected = False
                     
+                    last_2000_samples.append((sample, timestamp, has_blink))
                     # Put EEG data in the queue for broadcasting
                     await eeg_queue.put((sample, timestamp, has_blink))
                 

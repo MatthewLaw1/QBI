@@ -17,7 +17,6 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(eeg.router)
 app.include_router(inference.router)
 
 @app.get("/")

@@ -5,8 +5,8 @@ class EEGData(BaseModel):
     """
     Model for EEG data received from Muse 2
     """
-    timestamp: float
     channels: List[List[float]]  # [TP9, FP1, FP2, TP10]
+    timestamp: Optional[float] = None
     accelerometer: Optional[List[float]] = None
     gyroscope: Optional[List[float]] = None
     
