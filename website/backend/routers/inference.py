@@ -13,6 +13,12 @@ async def predict(data: EEGData, request: Request):
     try:
         # Step 1: Preprocess the EEG data
         processed_data = process_eeg_data(data)
+
+        # Step 2: Extract only the last 612 samples from each channel
+        for i in range(len(processed_data["processed_channels"])):
+            # If the channel has more than 612 samples, take only the last 612
+            if len(processed_data["processed_channels"][i]) > 612:
+                processed_data["processed_channels"][i] = processed_data["processed_channels"][i][-612:]
         
         # Step 2: Get prediction from the model
         prediction = get_prediction(processed_data)
