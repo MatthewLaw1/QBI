@@ -94,7 +94,7 @@ export default function Home() {
           .catch(error => {
             console.error('Error fetching prediction:', error)
           })
-      }, 1000)
+      }, 5000)
       
       // Clean up interval on unmount
       return () => clearInterval(interval)
