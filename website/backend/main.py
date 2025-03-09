@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import eeg, inference
+from routers import inference
 
 app = FastAPI(title="EEG Processing API")
 
