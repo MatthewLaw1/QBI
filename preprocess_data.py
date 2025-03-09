@@ -9,6 +9,13 @@ from mne.preprocessing import ICA
 import mne
 import matplotlib.pyplot as plt
 import scipy.stats
+import warnings
+
+# Silence all warnings
+warnings.filterwarnings('ignore')
+
+# Silence specific MNE warnings
+mne.set_log_level('ERROR')  # Only show errors, not warnings
 
 # Load data from pickle file
 print("Loading EEG dataset from pickle file...")
@@ -26,8 +33,7 @@ print(f"Labels shape: {labels.shape}")
 sampling_rate = 250  # Hz (adjust based on your actual sampling rate)
 lowcut_general = 0.5  # Hz - for general filtering
 highcut = 50  # Hz
-filter_order = 4  # Reduced from 6 to 4 for better stability
-
+filter_order = 6
 # New parameter for ICA-specific filtering
 lowcut_ica = 1.0  # Hz - higher cutoff specifically for ICA
 
@@ -70,7 +76,7 @@ def apply_ica(data, n_components=3):
         
         # Apply 1 Hz high-pass filter specifically for ICA
         raw_ica = raw.copy()
-        raw_ica.filter(l_freq=lowcut_ica, h_freq=None, filter_length=612)
+        raw_ica.filter(l_freq=lowcut_ica, h_freq=None, filter_length=825)
         
         # Apply ICA with fixed number of components and reduced verbosity
         ica = ICA(n_components=n_components, random_state=42, method='fastica', verbose=False)
