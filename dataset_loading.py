@@ -20,50 +20,6 @@ else:
 with open(output_file, "r") as file:
     data = file.read()
 
-# Calculate mean and standard deviation from first 200 values
-try:
-    # Initialize a list to store the first 200 values
-    first_200_values = []
-    
-    # Parse the data to extract values
-    for line in data.strip().split('\n'):
-        fields = line.split('\t')
-        if len(fields) < 7:  # Skip malformed lines
-            continue
-            
-        device = fields[2]
-        if device != "MU":  # Only process MUSE data
-            continue
-        
-        # Get the raw values from the line
-        raw_values = fields[6].split(',')
-        
-        # Convert values to float and add to our list
-        try:
-            values = [float(val.strip()) for val in raw_values]
-            # Add values to our list, but only until we reach 200
-            first_200_values.extend(values[:min(len(values), 200 - len(first_200_values))])
-            
-            # If we have 200 values, break the loop
-            if len(first_200_values) >= 200:
-                break
-                
-        except ValueError:
-            print(f"Warning: Could not parse values in a line. Skipping.")
-    
-    # Calculate mean and standard deviation
-    if first_200_values:
-        mean_value = np.mean(first_200_values)
-        std_value = np.std(first_200_values)
-        
-        print(f"\nStatistics from first 200 values:")
-        print(f"Mean: {mean_value:.4f}")
-        print(f"Standard Deviation: {std_value:.4f}")
-    else:
-        print("No values found to calculate statistics.")
-        mean_value = 0
-        std_value = 1  # Default to avoid division by zero
-
     # Define the expected channel order
     channel_order = ["TP9", "FP1", "FP2", "TP10"]
     
@@ -98,8 +54,13 @@ try:
         try:
             values = [float(val.strip()) for val in raw_values]
             
+            # Calculate mean and standard deviation for this array
+            array_mean = np.mean(values)
+            array_std = np.std(values)
+            #print(f"Array stats - Mean: {array_mean:.4f}, Std: {array_std:.4f}")
+            
             # Normalize values
-            normalized_values = [(v - mean_value) / std_value for v in values]
+            normalized_values = [(v - array_mean) / array_std for v in values]
             
             # Initialize code entry if needed
             if code not in current_samples:
@@ -165,10 +126,6 @@ try:
         pickle.dump({'dataset': dataset, 'labels': labels}, f)
     print(f"Dataset saved to {output_pkl}")
     
-except Exception as e:
-    print(f"Error processing data: {e}")
-    print("You may need to adjust the data parsing logic based on your file format")
-
 print(data[:500])
 
 # Option 2: If gdown doesn't work, you can try using a shareable link

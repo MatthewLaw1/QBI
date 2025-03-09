@@ -5,3 +5,4 @@
 *.pickle
 *.pickle.gz
 *.pickle.bz2
+*.parquet
