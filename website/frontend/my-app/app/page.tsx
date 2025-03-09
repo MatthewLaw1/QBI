@@ -8,42 +8,104 @@ import { PredictionDisplay } from "@/components/prediction-display"
 export default function Home() {
   const [eegData, setEegData] = useState<number[][]>([])
   const [prediction, setPrediction] = useState<number | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
 
-  // This is a placeholder for your actual data fetching logic
-  // You'll need to replace this with your actual implementation to connect to the Muse 2 device
+  // Connect to the SSE server to receive real-time EEG data
   useEffect(() => {
-    // Simulate incoming EEG data for demonstration
-    const interval = setInterval(() => {
-      // Generate random data for 4 EEG channels
-      const newDataPoint = [
-        Math.sin(Date.now() / 1000) * 50 + Math.random() * 20,
-        Math.sin(Date.now() / 1000 + 1) * 40 + Math.random() * 15,
-        Math.sin(Date.now() / 1000 + 2) * 30 + Math.random() * 10,
-        Math.sin(Date.now() / 1000 + 3) * 20 + Math.random() * 5,
-      ]
-
-      setEegData((prevData) => {
-        // Keep only the last 100 data points
-        const newData = [...prevData, newDataPoint]
-        if (newData.length > 100) {
-          return newData.slice(-100)
-        }
-        return newData
-      })
-
-      // Simulate ML prediction (replace with your actual backend call)
-      if (Math.random() > 0.9) {
-        // Occasionally update the prediction
-        setPrediction(Math.floor(Math.random() * 10))
+    // Create EventSource connection to the backend SSE endpoint
+    const eventSource = new EventSource('http://localhost:8765/eeg-stream')
+    
+    // Handle connection open
+    eventSource.addEventListener('connected', (event) => {
+      console.log('Connected to EEG stream:', event.data)
+      setIsConnected(true)
+    })
+    
+    // Handle incoming EEG data
+    eventSource.addEventListener('eeg', (event) => {
+      try {
+        const parsedData = JSON.parse(event.data)
+        const newDataPoint = parsedData.eeg
+        
+        // Update the EEG data state
+        setEegData((prevData) => {
+          // Add the new data point
+          const newData = [...prevData, newDataPoint]
+          
+          // Keep only the last 100 data points
+          if (newData.length > 500) {
+            return newData.slice(-500)
+          }
+          
+          // If we have less than 100 data points, pad with zeros at the beginning
+          if (newData.length < 500) {
+            const paddingNeeded = 500 - newData.length
+            const padding = Array(paddingNeeded).fill([0, 0, 0, 0])
+            return [...padding, ...newData]
+          }
+          
+          return newData
+        })
+        
+        // You could also send the data to your prediction API here
+        // For example:
+        // fetch('/api/eeg/predict', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify({ eeg: newDataPoint })
+        // })
+        // .then(res => res.json())
+        // .then(data => setPrediction(data.prediction))
+        
+      } catch (error) {
+        console.error('Error parsing EEG data:', error)
       }
-    }, 100)
-
-    return () => clearInterval(interval)
+    })
+    
+    // Handle errors
+    eventSource.onerror = (error) => {
+      console.error('EventSource error:', error)
+      setIsConnected(false)
+      
+      // Try to reconnect after a delay
+      setTimeout(() => {
+        eventSource.close()
+        // The browser will automatically try to reconnect
+      }, 5000)
+    }
+    
+    // Clean up on component unmount
+    return () => {
+      eventSource.close()
+    }
   }, [])
+
+  // Simulate ML prediction (replace with your actual backend call)
+  useEffect(() => {
+    if (eegData.length > 0) {
+      const interval = setInterval(() => {
+        // This is where you would call your backend API to get predictions
+        // For now, we'll just simulate it
+        if (Math.random() > 0.9) {
+          setPrediction(Math.floor(Math.random() * 10))
+        }
+      }, 1000)
+      
+      return () => clearInterval(interval)
+    }
+  }, [eegData.length])
 
   return (
     <main className="flex min-h-screen flex-col p-4 md:p-8">
       <h1 className="text-2xl font-bold mb-6">EEG Brain Wave Analysis</h1>
+      
+      <div className="mb-4">
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+          isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+        }`}>
+          {isConnected ? 'Connected to EEG Stream' : 'Disconnected'}
+        </span>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 w-full">
         <Card className="lg:col-span-2 overflow-hidden flex flex-col h-full">

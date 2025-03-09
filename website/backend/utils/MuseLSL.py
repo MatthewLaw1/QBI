@@ -19,46 +19,57 @@ eeg_queue = asyncio.Queue()
 
 # SSE endpoint handler
 async def sse_handler(request):
-    # Prepare response with appropriate headers for SSE
-    response = web.Response(
-        content_type='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*',  # For CORS, adjust as needed
-        }
-    )
-    
-    # Create a response stream
-    response.enable_chunked_encoding()
-    
-    # Create a queue for this client
-    client_queue = asyncio.Queue()
-    sse_clients.add(client_queue)
-    
-    # Write initial connection message
-    await response.write(b'event: connected\ndata: Connected to EEG stream\n\n')
-    
     try:
-        while True:
-            # Get data from the client queue
-            data = await client_queue.get()
-            
-            # Format as SSE message
-            message = f"event: eeg\ndata: {data}\n\n"
-            await response.write(message.encode('utf-8'))
-            
-            # Yield control to allow other coroutines to run
-            await asyncio.sleep(0)
-    except ConnectionResetError:
-        # Client disconnected
-        pass
-    finally:
-        # Remove client when disconnected
-        if client_queue in sse_clients:
-            sse_clients.remove(client_queue)
-    
-    return response
+        # Create a StreamResponse object for SSE
+        response = web.StreamResponse(
+            status=200,
+            reason='OK',
+            headers={
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': '*',  # For CORS, adjust as needed
+            }
+        )
+        
+        # Prepare the response - this sends the headers
+        await response.prepare(request)
+        
+        # Create a queue for this client
+        client_queue = asyncio.Queue()
+        sse_clients.add(client_queue)
+        
+        # Write initial connection message
+        await response.write(b'event: connected\ndata: Connected to EEG stream\n\n')
+        print(f"Client connected, total clients: {len(sse_clients)}")
+        
+        try:
+            while True:
+                # Get data from the client queue
+                data = await client_queue.get()
+                
+                # Format as SSE message
+                message = f"event: eeg\ndata: {data}\n\n"
+                await response.write(message.encode('utf-8'))
+                
+                # Yield control to allow other coroutines to run
+                await asyncio.sleep(0)
+        except ConnectionResetError:
+            print("Client disconnected (connection reset)")
+        except Exception as e:
+            print(f"Error in SSE handler loop: {str(e)}")
+        finally:
+            # Remove client when disconnected
+            if client_queue in sse_clients:
+                sse_clients.remove(client_queue)
+                print(f"Client removed, remaining clients: {len(sse_clients)}")
+        
+        return response
+    except Exception as e:
+        print(f"Error in SSE handler: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return web.Response(status=500, text=f"Internal Server Error: {str(e)}")
 
 # Function to broadcast EEG data to all SSE clients
 async def broadcast_eeg_data():
@@ -83,34 +94,56 @@ async def broadcast_eeg_data():
 
 # Main function to process EEG data
 async def process_eeg_data():
-    # Resolve the stream from MuseLSL (looking for EEG stream)
-    print("Looking for an EEG stream...")
-    streams = resolve_streams(5.0)
-    
-    # Create an inlet for the EEG stream
-    inlet = StreamInlet(streams[0])
-    
-    while True:
-        # Get the sample (EEG data) and timestamp from the LSL stream
-        sample, timestamp = inlet.pull_sample()
+    try:
+        # Resolve the stream from MuseLSL (looking for EEG stream)
+        print("Looking for an EEG stream...")
+        streams = resolve_streams(5.0)
         
-        # Build OSC message with EEG data (for TouchDesigner)
-        message = OscMessageBuilder(address="/muse/eeg")
-        for eeg_value in sample:
-            message.add_arg(eeg_value)
+        if not streams:
+            print("No EEG stream found! Make sure your Muse headset is connected.")
+            # Keep trying to find streams
+            while not streams:
+                await asyncio.sleep(5)
+                print("Looking for an EEG stream again...")
+                streams = resolve_streams(5.0)
         
-        # Send the message to TouchDesigner
-        message = message.build()
-        client.send(message)
+        print(f"Found {len(streams)} stream(s). Using the first one: {streams[0].name()}")
         
-        # Put EEG data in the queue for broadcasting
-        await eeg_queue.put((sample, timestamp))
+        # Create an inlet for the EEG stream
+        inlet = StreamInlet(streams[0])
         
-        # Print the EEG data (for debugging)
-        print(sample)
+        sample_count = 0
         
-        # Small delay to prevent overload
-        await asyncio.sleep(0.1)
+        while True:
+            try:
+                # Get the sample (EEG data) and timestamp from the LSL stream
+                sample, timestamp = inlet.pull_sample()
+                
+                sample_count += 1
+                if sample_count % 100 == 0:  # Log every 100th sample to avoid console spam
+                    print(f"Sample #{sample_count}: {sample}")
+                
+                # Build OSC message with EEG data (for TouchDesigner)
+                message = OscMessageBuilder(address="/muse/eeg")
+                for eeg_value in sample:
+                    message.add_arg(eeg_value)
+                
+                # Send the message to TouchDesigner
+                message = message.build()
+                client.send(message)
+                
+                # Put EEG data in the queue for broadcasting
+                await eeg_queue.put((sample, timestamp))
+                
+                # Small delay to prevent overload
+                await asyncio.sleep(0.01)
+            except Exception as e:
+                print(f"Error processing EEG sample: {str(e)}")
+                await asyncio.sleep(1)  # Prevent tight loop in case of repeated errors
+    except Exception as e:
+        print(f"Error in process_eeg_data: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 # Configure and start the web server
 async def start_server():

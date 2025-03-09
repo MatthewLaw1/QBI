@@ -35,9 +35,6 @@ export function PredictionDisplay({ value }: PredictionDisplayProps) {
           >
             {value}
           </div>
-          <div className="mt-8 text-center text-muted-foreground">
-            <p>This value represents the pattern detected by your ML model</p>
-          </div>
         </>
       )}
     </div>
