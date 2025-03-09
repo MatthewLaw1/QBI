@@ -5,3 +5,4 @@ downloaded_file.txt
 *.pickle.gz
 *.pickle.bz2
 *.parquet
+*.pyc

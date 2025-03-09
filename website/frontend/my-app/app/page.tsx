@@ -32,12 +32,12 @@ export default function Home() {
           // Add the new data point
           const newData = [...prevData, newDataPoint]
           
-          // Keep only the last 100 data points
+          // Keep only the last 500 data points
           if (newData.length > 500) {
             return newData.slice(-500)
           }
           
-          // If we have less than 100 data points, pad with zeros at the beginning
+          // If we have less than 500 data points, pad with zeros at the beginning
           if (newData.length < 500) {
             const paddingNeeded = 500 - newData.length
             const padding = Array(paddingNeeded).fill([0, 0, 0, 0])
@@ -46,16 +46,6 @@ export default function Home() {
           
           return newData
         })
-        
-        // You could also send the data to your prediction API here
-        // For example:
-        // fetch('/api/eeg/predict', {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ eeg: newDataPoint })
-        // })
-        // .then(res => res.json())
-        // .then(data => setPrediction(data.prediction))
         
       } catch (error) {
         console.error('Error parsing EEG data:', error)
@@ -80,17 +70,33 @@ export default function Home() {
     }
   }, [])
 
-  // Simulate ML prediction (replace with your actual backend call)
+  // Poll the backend API for predictions
   useEffect(() => {
+    // Only start polling when we have EEG data
     if (eegData.length > 0) {
+      console.log("Starting prediction polling")
+      
+      // Poll for predictions every second
       const interval = setInterval(() => {
-        // This is where you would call your backend API to get predictions
-        // For now, we'll just simulate it
-        if (Math.random() > 0.9) {
-          setPrediction(Math.floor(Math.random() * 10))
-        }
+        fetch('http://localhost:8000/prediction')
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`)
+            }
+            return response.json()
+          })
+          .then(data => {
+            if (data.predicted_number !== null) {
+              console.log("Received prediction:", data.predicted_number)
+              setPrediction(data.predicted_number)
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching prediction:', error)
+          })
       }, 1000)
       
+      // Clean up interval on unmount
       return () => clearInterval(interval)
     }
   }, [eegData.length])
@@ -114,7 +120,7 @@ export default function Home() {
           </CardHeader>
           <CardContent className="flex-grow">
             <div className="w-full h-full min-h-[500px] p-4">
-              <EEGGraph data={eegData} timeWindow={50} />
+              <EEGGraph data={eegData} timeWindow={500} />
             </div>
           </CardContent>
         </Card>
