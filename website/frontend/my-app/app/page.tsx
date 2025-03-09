@@ -46,12 +46,14 @@ export default function Home() {
       <h1 className="text-2xl font-bold mb-6">EEG Brain Wave Analysis</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 w-full">
-        <Card className="lg:col-span-2 overflow-hidden">
-          <CardHeader>
+        <Card className="lg:col-span-2 overflow-hidden flex flex-col h-full">
+          <CardHeader className="pb-2">
             <CardTitle>EEG Data Stream</CardTitle>
           </CardHeader>
-          <CardContent>
-            <EEGGraph data={eegData} timeWindow={50} />
+          <CardContent className="flex-grow">
+            <div className="w-full h-full min-h-[500px] p-4">
+              <EEGGraph data={eegData} timeWindow={50} />
+            </div>
           </CardContent>
         </Card>
 
